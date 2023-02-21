@@ -32,10 +32,11 @@ class MyApp extends StatefulWidget {
   _MyAppState createState() => _MyAppState();
 }
 
-const sampleRate = 8000;
-
 class _MyAppState extends State<MyApp> {
   RandomColor randomColorGen = RandomColor();
+  RecorderStream _recorder = RecorderStream();
+
+  late StreamSubscription<Uint8List> _audioStream;
 
   UsbPort? _port;
   String _status = "Idle";
@@ -47,6 +48,7 @@ class _MyAppState extends State<MyApp> {
 
   ///
   final List<int> _chunks = [];
+  final List<int> _micChunks = [];
   late final StreamController<List<int>> _analogChunks;
 
   //for classifier
@@ -69,6 +71,7 @@ class _MyAppState extends State<MyApp> {
   Transaction<String>? _transaction;
   UsbDevice? _device;
 
+  final sampleRate = 8000;
   final audioSampleRate = 16000;
 
   final TextEditingController _textController = TextEditingController();
@@ -87,70 +90,21 @@ class _MyAppState extends State<MyApp> {
 
     _getPorts();
 
-///////////////
     streamController = StreamController();
 
     // initPlugin();
     init();
     Future.delayed(const Duration(seconds: 5)).then((value) {
       _timer = Timer.periodic(const Duration(seconds: 2), (Timer t) {
-        streamController.add(_classifier.predict(_data));
+        streamController.add(_classifier.predict(_micChunks));
       });
     });
-  }
-
-  Future<void> initPlugin() async {
-    // _audioStream = _recorder.audioStream.listen((data) {
   }
 
   Future<void> init() async {
     _classifier = Classifier();
     await _classifier.loadModel();
     await _classifier.loadLabels();
-  }
-
-  ////
-  ///
-  Future<void> openFileAndRead() async {
-    if (await Permission.storage.request().isGranted) {
-      File file = File("/storage/emulated/0/Download/data.txt");
-      lines = file
-          .openRead()
-          .transform(utf8.decoder) // Decode bytes to UTF-8.
-          .transform(const LineSplitter());
-      // lines.listen((line) {
-      for (var byte in Audio.samples) {
-        _chunks.add(byte);
-        if (_chunks.length > 2555) {
-          _analogChunks.add(Uint8List.fromList(_chunks));
-          _chunks.clear();
-        }
-
-        // });
-
-        setState(() {
-          _serialData.add(Text(byte.toString()));
-          // if (_serialData.length > 20) {
-          //   _serialData.removeAt(0);
-          // }
-        });
-      }
-
-      _analogChunks.stream.listen((event) {
-        print(event);
-        if (_data.length > audioSampleRate) {
-          print(_data.length);
-          _data.clear();
-        }
-        log(event.toString());
-        _data.addAll(event);
-      });
-      streamController.stream.listen((event) {
-        setState(() {
-          preds = event;
-        });
-      });
-    }
   }
 
   void setDirection(String directionAsString) {
@@ -203,6 +157,7 @@ class _MyAppState extends State<MyApp> {
       setState(() {
         _status = "Disconnected";
       });
+      // _audioStream.cancel();
       return true;
     }
 
@@ -227,50 +182,38 @@ class _MyAppState extends State<MyApp> {
           // log(l.last);
           setDirection(l.last);
         });
-      } else {
-        final byte = () {
-          // return int.parse(line);
-          if (l.length < 2) {
-            return int.parse(l.first);
-          } else {
-            return int.parse(l[1]);
-          }
-        }();
-        _chunks.add(byte);
-        if (_chunks.length > 1200) {
-          ByteData byteData = ByteData(_chunks.length * 2);
-          for (int i = 0; i < _chunks.length; i++) {
-            // byteData.setUint64(byteOffset, value)
-            byteData.setUint16(i * 2, _chunks[i], Endian.little);
-          }
-          // _analogChunks.add(_chunks);
-          _analogChunks.add(byteData.buffer.asUint8List());
-          log(_chunks.toString());
-          _chunks.clear();
-        }
       }
     });
-    await Future.delayed(const Duration(milliseconds: 1500));
+    _audioStream = _recorder.audioStream.listen((data) {
+      // log(data.toString());
 
-    _analogChunks.stream.listen((event) {
-      // log(event.toString());
-      if (_data.length > 2 * sampleRate) {
-        print(_data.length);
-        _data.clear();
+      if (_micChunks.length > 2 * sampleRate) {
+        _micChunks.clear();
       }
-      _data.addAll(event);
-      log(event.toString());
+      _micChunks.addAll(data);
+      see(data);
     });
+
     streamController.stream.listen((event) {
       setState(() {
         preds = event;
       });
     });
+    await Future.wait([_recorder.initialize(), _recorder.start()]);
 
     setState(() {
       _status = "Connected";
     });
     return true;
+  }
+
+  void see(Uint8List shortBytes) {
+    ByteData byteData = ByteData.sublistView(shortBytes);
+    List<int> shortList = [];
+    for (int i = 0; i < byteData.lengthInBytes; i += 2) {
+      shortList.add(byteData.getInt16(i, Endian.little));
+    }
+    log(shortList.toString());
   }
 
   List<UsbDevice> devices = [];
@@ -308,6 +251,7 @@ class _MyAppState extends State<MyApp> {
     super.dispose();
     streamController.close();
     _analogChunks.close();
+    _audioStream.cancel();
     _connectTo(null);
   }
 

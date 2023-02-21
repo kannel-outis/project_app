@@ -1,8 +1,9 @@
 // import 'dart:typed_data';
 
-import 'main.dart';
+// import 'main.dart';
 import 'package:flutter/services.dart';
 import 'package:collection/collection.dart';
+import 'package:project_app/main_.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:tflite_flutter_helper/tflite_flutter_helper.dart';
 
@@ -62,6 +63,7 @@ class Classifier {
     TensorAudio tensorAudio = TensorAudio.create(
         TensorAudioFormat.create(1, sampleRate), _inputShape[0]);
     tensorAudio.loadShortBytes(bytes);
+    // tensorAudio.loadList(audioSample);
     final pre = DateTime.now().millisecondsSinceEpoch - pres;
 
     final runs = DateTime.now().millisecondsSinceEpoch;
@@ -76,6 +78,28 @@ class Classifier {
     final top = getTopProbability(labeledProb);
     return top;
   }
+
+  // List<Category> predict(List<int> audioSample) {
+  //   final pres = DateTime.now().millisecondsSinceEpoch;
+  //   Uint8List bytes = Uint8List.fromList(audioSample);
+  //   TensorAudio tensorAudio = TensorAudio.create(
+  //       TensorAudioFormat.create(1, sampleRate), _inputShape[0]);
+  //   // tensorAudio.loadShortBytes(bytes);
+  //   tensorAudio.loadList(audioSample);
+  //   final pre = DateTime.now().millisecondsSinceEpoch - pres;
+
+  //   final runs = DateTime.now().millisecondsSinceEpoch;
+  //   interpreter.run(
+  //       tensorAudio.tensorBuffer.getBuffer(), _outputBuffer.getBuffer());
+  //   final run = DateTime.now().millisecondsSinceEpoch - runs;
+
+  //   Map<String, double> labeledProb = {};
+  //   for (int i = 0; i < _outputBuffer.getDoubleList().length; i++) {
+  //     labeledProb[labels[i]!] = _outputBuffer.getDoubleValue(i);
+  //   }
+  //   final top = getTopProbability(labeledProb);
+  //   return top;
+  // }
 
   void close() {
     interpreter.close();
